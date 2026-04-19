@@ -403,7 +403,7 @@
                 // Left Sync Mark
                 svgHtml += `<rect x="4%" y="${yPct}%" width="25" height="10" transform="translate(0, -5)" fill="black" />`;
                 
-                // NEW: Right Sync Mark (Timing Track for extreme precision)
+                // Right Sync Mark (Timing Track for extreme precision)
                 svgHtml += `<rect x="96%" y="${yPct}%" width="25" height="10" transform="translate(-25, -5)" fill="black" />`;
                 
                 if(i < 10) {
@@ -556,47 +556,79 @@
 
                                 let rowContours = new cv.MatVector();
                                 cv.findContours(warpedThresh, rowContours, new cv.Mat(), cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-                                let rowMarks = [];
+                                
+                                // NEW: SEPARATE LEFT AND RIGHT SYNC MARKS
+                                let leftMarks = [];
+                                let rightMarks = [];
+                                
                                 for (let j = 0; j < rowContours.size(); ++j) {
                                     let bRect = cv.boundingRect(rowContours.get(j));
                                     let cX = bRect.x + (bRect.width / 2); let cY = bRect.y + (bRect.height / 2);
-                                    if (cX < outW * 0.08 && bRect.width > bRect.height * 1.5 && bRect.width > outW * 0.01) {
-                                        if (cY > outH * 0.05 && cY < outH * 0.95) rowMarks.push({ y: cY });
+                                    if (bRect.width > bRect.height * 1.5 && bRect.width > outW * 0.01) {
+                                        if (cY > outH * 0.05 && cY < outH * 0.95) {
+                                            if (cX < outW * 0.15) leftMarks.push({ x: cX, y: cY });
+                                            else if (cX > outW * 0.85) rightMarks.push({ x: cX, y: cY });
+                                        }
                                     }
                                 }
-                                rowMarks.sort((a, b) => a.y - b.y);
-                                let uniqueMarks = [];
-                                for(let i=0; i<rowMarks.length; i++) {
-                                    if (uniqueMarks.length === 0 || rowMarks[i].y - uniqueMarks[uniqueMarks.length-1].y > outH * 0.02) uniqueMarks.push(rowMarks[i]);
+                                
+                                leftMarks.sort((a, b) => a.y - b.y);
+                                rightMarks.sort((a, b) => a.y - b.y);
+                                
+                                let uniqueLeft = [];
+                                for(let i=0; i<leftMarks.length; i++) {
+                                    if (uniqueLeft.length === 0 || leftMarks[i].y - uniqueLeft[uniqueLeft.length-1].y > outH * 0.02) uniqueLeft.push(leftMarks[i]);
+                                }
+                                
+                                let uniqueRight = [];
+                                for(let i=0; i<rightMarks.length; i++) {
+                                    if (uniqueRight.length === 0 || rightMarks[i].y - uniqueRight[uniqueRight.length-1].y > outH * 0.02) uniqueRight.push(rightMarks[i]);
                                 }
 
-                                if (uniqueMarks.length === EXPECTED_ROWS) {
+                                if (uniqueLeft.length === EXPECTED_ROWS) {
                                     
-                                    // 🚀 SMART STRATEGY 1: INNER CORE SAMPLING
+                                    // 🚀 SMART STRATEGY 3: DUAL-TRACK INTERPOLATION
+                                    // If both tracks are found, the scanner will use the exact slope between them
+                                    let isDualTrack = (uniqueRight.length === EXPECTED_ROWS);
+                                    
+                                    if (isDualTrack) {
+                                        // Draw faint yellow tracking lines across the page to show Dual-Track is active!
+                                        for(let i=0; i<EXPECTED_ROWS; i++) {
+                                            cv.line(warped, new cv.Point(uniqueLeft[i].x, uniqueLeft[i].y), new cv.Point(uniqueRight[i].x, uniqueRight[i].y), [255, 200, 0, 150], 1);
+                                        }
+                                    }
+
+                                    let getExactY = function(rowIdx, targetX) {
+                                        let leftPt = uniqueLeft[rowIdx];
+                                        if (isDualTrack) {
+                                            let rightPt = uniqueRight[rowIdx];
+                                            // Linear Interpolation solves paper curve / skew
+                                            return leftPt.y + (targetX - leftPt.x) * ((rightPt.y - leftPt.y) / (rightPt.x - leftPt.x));
+                                        }
+                                        return leftPt.y; // Fallback gracefully if right side is dirty
+                                    };
+                                    
                                     let checkBubble = function(threshMat, x, y, r) {
-                                        // Shrink radius by 50%. We ONLY check the white center inside the printed circle.
-                                        // This makes it completely immune to camera lens distortion picking up the printed lines.
                                         let innerR = r * 0.5; 
                                         let box = new cv.Rect(Math.max(0, x - innerR), Math.max(0, y - innerR), innerR * 2, innerR * 2);
                                         if(box.x + box.width > outW || box.y + box.height > outH) return 0;
                                         let roi = threshMat.roi(box);
                                         let fillRatio = cv.countNonZero(roi) / (box.width * box.height);
                                         roi.delete(); 
-                                        return fillRatio; // Returning exact ratio instead of boolean
+                                        return fillRatio; 
                                     };
 
                                     let radius = outW * 0.011;
                                     let rollNoArray = new Array(config.roll).fill(-1);
                                     
-                                    // 🚀 SMART STRATEGY 2: COLUMN CONFIDENCE MAPPING (For Roll No)
                                     for(let d = 0; d < config.roll; d++) {
-                                        let bestRatio = 0.40; // Needs to be at least 40% filled to count
+                                        let bestRatio = 0.40; 
                                         let bestDigit = -1;
                                         
-                                        // Find the darkest bubble in this column
                                         for (let i = 0; i < 10; i++) {
-                                            let rowY = uniqueMarks[i].y;
-                                            let ratio = checkBubble(warpedThresh, outW * (0.10 + (d * 0.05)), rowY, radius);
+                                            let x = outW * (0.10 + (d * 0.05));
+                                            let rowY = getExactY(i, x); 
+                                            let ratio = checkBubble(warpedThresh, x, rowY, radius);
                                             if (ratio > bestRatio) {
                                                 bestRatio = ratio;
                                                 bestDigit = i;
@@ -604,29 +636,28 @@
                                         }
                                         rollNoArray[d] = bestDigit;
                                         
-                                        // Draw feedback
                                         for (let i = 0; i < 10; i++) {
-                                            let rowY = uniqueMarks[i].y;
                                             let x = outW * (0.10 + (d * 0.05)); 
+                                            let rowY = getExactY(i, x);
                                             let filled = (i === bestDigit);
                                             cv.circle(warped, new cv.Point(x, rowY), Math.round(radius), filled ? [0, 255, 0, 255] : [200, 200, 200, 255], filled ? 3 : 2);
                                         }
                                     }
 
-                                    // Answer Check Logic using the new strict Inner Core ratio
                                     let correctAnswers = 0;
                                     for (let q = 0; q < config.questions; q++) {
                                         let isCol1 = (q < questionRows);
                                         let rowIdx = isCol1 ? q : (q - questionRows);
-                                        let rowY = uniqueMarks[rowIdx].y;
                                         
                                         let xPcts = isCol1 ? [0.45, 0.51, 0.57, 0.63] : [0.75, 0.81, 0.87, 0.93];
                                         let expectedAns = config.answerKey[q];
                                         let filledOptions = [];
                                         
                                         for (let opt = 0; opt < 4; opt++) {
-                                            let ratio = checkBubble(warpedThresh, outW * xPcts[opt], rowY, radius);
-                                            if (ratio > 0.40) { // If inner core is >40% black, it's definitely marked
+                                            let x = outW * xPcts[opt];
+                                            let rowY = getExactY(rowIdx, x); 
+                                            let ratio = checkBubble(warpedThresh, x, rowY, radius);
+                                            if (ratio > 0.40) { 
                                                 filledOptions.push(opt);
                                             }
                                         }
@@ -634,13 +665,12 @@
                                         let isCorrect = (filledOptions.length === 1 && filledOptions[0] === expectedAns);
                                         if (isCorrect) correctAnswers++;
 
-                                        // Visualization Logic
                                         for (let opt = 0; opt < 4; opt++) {
-                                            let center = new cv.Point(outW * xPcts[opt], rowY);
+                                            let x = outW * xPcts[opt];
+                                            let rowY = getExactY(rowIdx, x);
+                                            let center = new cv.Point(x, rowY);
                                             let filled = filledOptions.includes(opt);
                                             
-                                            // Green = Marked & Correct. Red = Marked & Wrong.
-                                            // Blue = Unmarked, but was the Correct Answer. Grey = Unmarked & Wrong.
                                             if (filled) {
                                                 cv.circle(warped, center, Math.round(radius), isCorrect ? [0, 255, 0, 255] : [255, 0, 0, 255], 4);
                                             } else {
@@ -663,7 +693,9 @@
 
                                 } else {
                                     stableFrames = 0; lastCenters = [];
-                                    scanStatus.style.backgroundColor = "#17a2b8"; scanStatus.innerText = `Expecting ${EXPECTED_ROWS} rows. Found ${uniqueMarks.length}. Keep steady...`;
+                                    scanStatus.style.backgroundColor = "#17a2b8"; 
+                                    // Notice the UI now tells you if it's missing the Left (L) or Right (R) marks
+                                    scanStatus.innerText = `Expecting ${EXPECTED_ROWS} rows. Found L:${uniqueLeft.length} R:${uniqueRight.length}. Keep steady...`;
                                     setTargetUI("rgba(255, 255, 255, 0.4)", "transparent");
                                     autoScanInterval = setInterval(attemptAutoCapture, 500);
                                 }
