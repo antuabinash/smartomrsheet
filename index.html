@@ -383,11 +383,11 @@
                 <rect x="100%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
 
                 <!-- Decorative Divider -->
-                <line x1="36%" y1="5%" x2="36%" y2="95%" stroke="#ccc" stroke-dasharray="5,5" stroke-width="2" />
+                <line x1="40%" y1="5%" x2="40%" y2="95%" stroke="#ccc" stroke-dasharray="5,5" stroke-width="2" />
                 
                 <!-- Section Titles -->
-                <text x="20%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ROLL NO</text>
-                <text x="68%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ANSWERS</text>
+                <text x="23%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ROLL NO</text>
+                <text x="67%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ANSWERS</text>
             `;
 
             function drawBubble(cx, cy, label) {
@@ -408,14 +408,14 @@
                 
                 if(i < 10) {
                     for(let d=0; d<config.roll; d++) {
-                        let xPct = 10 + (d * 5);
+                        let xPct = 9 + (d * 4);
                         svgHtml += drawBubble(xPct, yPct, i);
                     }
                 }
 
                 let q1 = i + 1;
                 if(q1 <= questionRows && q1 <= config.questions) {
-                    svgHtml += `<text x="39%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q1}.</text>`;
+                    svgHtml += `<text x="43%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q1}.</text>`;
                     [45, 51, 57, 63].forEach((x, idx) => { 
                         svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
                     });
@@ -424,7 +424,7 @@
                 let q2 = i + 1 + questionRows; 
                 if(q2 <= config.questions) {
                     svgHtml += `<text x="69%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q2}.</text>`;
-                    [75, 81, 87, 93].forEach((x, idx) => { 
+                    [71, 77, 83, 89].forEach((x, idx) => { 
                         svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
                     });
                 }
@@ -626,7 +626,7 @@
                                         let bestDigit = -1;
                                         
                                         for (let i = 0; i < 10; i++) {
-                                            let x = outW * (0.10 + (d * 0.05));
+                                            let x = outW * (0.09 + (d * 0.04));
                                             let rowY = getExactY(i, x); 
                                             let ratio = checkBubble(warpedThresh, x, rowY, radius);
                                             if (ratio > bestRatio) {
@@ -637,7 +637,7 @@
                                         rollNoArray[d] = bestDigit;
                                         
                                         for (let i = 0; i < 10; i++) {
-                                            let x = outW * (0.10 + (d * 0.05)); 
+                                            let x = outW * (0.09 + (d * 0.04)); 
                                             let rowY = getExactY(i, x);
                                             let filled = (i === bestDigit);
                                             cv.circle(warped, new cv.Point(x, rowY), Math.round(radius), filled ? [0, 255, 0, 255] : [200, 200, 200, 255], filled ? 3 : 2);
@@ -649,7 +649,7 @@
                                         let isCol1 = (q < questionRows);
                                         let rowIdx = isCol1 ? q : (q - questionRows);
                                         
-                                        let xPcts = isCol1 ? [0.45, 0.51, 0.57, 0.63] : [0.75, 0.81, 0.87, 0.93];
+                                        let xPcts = isCol1 ? [0.45, 0.51, 0.57, 0.63] : [0.71, 0.77, 0.83, 0.89];
                                         let expectedAns = config.answerKey[q];
                                         let filledOptions = [];
                                         
