@@ -59,10 +59,10 @@
         .input-line { flex-grow: 1; border-bottom: 1px solid black; margin-left: 10px; height: 18px; }
         .instructions { margin-top: 20px; font-size: 12px; font-style: italic; color: #333; text-align: left; background: #f9f9f9; padding: 10px; border-left: 4px solid #000; }
         
-        /* QR Code CSS Fix: Added canvas target, enforced !important scaling, and increased size slightly */
-        #qrcode { position: absolute; right: 0; top: 0; width: 120px; height: 120px; border: 2px solid #ccc; padding: 5px; background: white;}
+        /* QR Code CSS reverted to neat 100px size since it no longer holds dense data */
+        #qrcode { position: absolute; right: 0; top: 0; width: 100px; height: 100px; border: 2px solid #ccc; padding: 5px; background: white;}
         #qrcode img, #qrcode canvas { width: 100% !important; height: 100% !important; display: block; }
-        .qr-label { position: absolute; right: 0; top: 135px; width: 130px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
+        .qr-label { position: absolute; right: 0; top: 115px; width: 110px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
         
         .scan-area { position: relative; width: 100%; flex-grow: 1; min-height: 750px; margin-top: 10px; }
         
@@ -157,8 +157,15 @@
                 <p style="font-size: 14px; color: #555;">Your custom sheet and scanner are ready.</p>
                 
                 <a href="#" id="sheetLink" target="_blank" class="btn-link btn-sheet">📄 Print OMR Sheet</a>
-                <a href="#" id="scanLink" target="_blank" class="btn-link btn-scan">📷 Open Scanner</a>
+                <a href="#" id="scanLink" target="_blank" class="btn-link btn-scan">📷 Open Scanner on PC</a>
                 
+                <!-- NEW: Secure Teacher Mobile Scanner Section -->
+                <div style="margin-top: 25px; border: 2px dashed #0d6efd; padding: 20px; border-radius: 8px; background: #f8f9fa;">
+                    <h4 style="margin-top: 0; color: #0d6efd;">📱 Teacher Mobile Scanner</h4>
+                    <p style="font-size: 13px; margin-bottom: 15px; color: #555;">Scan this QR with your phone to instantly load the grading engine with your secret answer key.</p>
+                    <div id="teacherQrCode" style="display: flex; justify-content: center; padding: 10px; background: white; border-radius: 8px; width: fit-content; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"></div>
+                </div>
+
                 <div class="copy-link">
                     <strong>Shareable Scanner Link for Teachers:</strong><br>
                     <span id="shareableLinkText"></span>
@@ -236,6 +243,8 @@
             const urlParams = new URLSearchParams(window.location.search);
             const mode = urlParams.get('mode');
             const encodedData = urlParams.get('data');
+            const scanMicroData = urlParams.get('d'); // NEW: Micro payload for scanner
+            const sheetScanData = urlParams.get('scan'); // NEW: Passed to sheet for QR generation
 
             // Default Config
             let config = {
@@ -244,10 +253,19 @@
                 answerKey: new Array(40).fill(0)
             };
 
-            if (encodedData) {
+            // NEW: Parse the ultra-short micro payload for the scanner
+            if (scanMicroData && mode === 'scan') {
+                const parts = scanMicroData.split('-');
+                if (parts.length === 3) {
+                    config.questions = parseInt(parts[0]);
+                    config.roll = parseInt(parts[1]);
+                    config.answerKey = parts[2].split('').map(Number);
+                }
+            } else if (encodedData) {
+                // Parse full LZString payload for the Sheet view
                 try {
-                    // STEP 1 UPGRADE: Decompressing the URL string using LZString
-                    config = JSON.parse(LZString.decompressFromEncodedURIComponent(encodedData));
+                    const parsed = JSON.parse(LZString.decompressFromEncodedURIComponent(encodedData));
+                    config = { ...config, ...parsed };
                     if (!config.answerKey) config.answerKey = new Array(config.questions).fill(0);
                 } catch (e) {
                     console.error("Data decode failed, using defaults.");
@@ -258,7 +276,7 @@
             if (mode === 'sheet') {
                 document.body.className = 'sheet-mode';
                 document.getElementById('view-sheet').style.display = 'block';
-                initSheet(config, encodedData);
+                initSheet(config, sheetScanData); 
             } else if (mode === 'scan') {
                 document.body.className = 'scanner-mode';
                 document.getElementById('view-scanner').style.display = 'block';
@@ -296,14 +314,16 @@
             generateAnswerKeyUI(); // initial draw
 
             document.getElementById('builderForm').addEventListener('submit', function(e) {
-                e.preventDefault(); // Prevents page reload
+                e.preventDefault(); 
 
                 const totalQ = parseInt(totalQInput.value);
+                const rollDigits = parseInt(document.getElementById('rollDigits').value);
                 let masterKey = [];
                 for (let i = 1; i <= totalQ; i++) {
                     masterKey.push(parseInt(document.getElementById('ans_' + i).value));
                 }
 
+                // 1. Full Config (For the printed sheet text)
                 const config = {
                     school: document.getElementById('schoolName').value.trim(),
                     exam: document.getElementById('examName').value.trim(),
@@ -311,67 +331,65 @@
                     marks: document.getElementById('fullMarks').value,
                     instructions: document.getElementById('instructions').value.trim(),
                     questions: totalQ,
-                    roll: parseInt(document.getElementById('rollDigits').value),
+                    roll: rollDigits,
                     answerKey: masterKey
                 };
-
-                // STEP 1 UPGRADE: Compressing to create tiny, safe URLs
-                const encodedData = LZString.compressToEncodedURIComponent(JSON.stringify(config));
+                const encodedSheetData = LZString.compressToEncodedURIComponent(JSON.stringify(config));
+                
+                // 2. MICRO CONFIG (For the QR Code & Scanner URL)
+                // Looks like: "100-5-01230123..." (Strips all text, reducing URL by ~80%)
+                const scanMicroData = `${totalQ}-${rollDigits}-${masterKey.join('')}`;
+                
                 const baseUrl = window.location.href.split('?')[0].split('#')[0];
                 
-                const sheetUrl = `${baseUrl}?mode=sheet&data=${encodedData}`;
-                const scanUrl = `${baseUrl}?mode=scan&data=${encodedData}`; 
+                // Pass both full data AND micro data to the sheet view
+                const sheetUrl = `${baseUrl}?mode=sheet&data=${encodedSheetData}&scan=${scanMicroData}`;
+                const scanUrl = `${baseUrl}?mode=scan&d=${scanMicroData}`; 
 
                 document.getElementById('sheetLink').href = sheetUrl;
                 document.getElementById('scanLink').href = scanUrl;
                 document.getElementById('shareableLinkText').innerText = scanUrl;
+                
+                // NEW: Generate the Secure Teacher QR Code directly on the dashboard
+                document.getElementById('teacherQrCode').innerHTML = '';
+                new QRCode(document.getElementById("teacherQrCode"), {
+                    text: scanUrl, 
+                    width: 180, height: 180,
+                    colorDark : "#000000", colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.L
+                });
+
                 document.getElementById('actionArea').style.display = 'block';
             });
         }
 
         /* ================== SHEET LOGIC ================== */
-    function initSheet(config, rawEncodedString) {
-        document.getElementById('outSchool').innerText = config.school;
-        document.getElementById('outExam').innerText = config.exam;
-        document.getElementById('outTime').innerText = config.time;
-        document.getElementById('outMarks').innerText = config.marks;
-        document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
+        function initSheet(config, scanMicroData) {
+            document.getElementById('outSchool').innerText = config.school;
+            document.getElementById('outExam').innerText = config.exam;
+            document.getElementById('outTime').innerText = config.time;
+            document.getElementById('outMarks').innerText = config.marks;
+            document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
 
-        // QR CODE FIX: Generate Full URL and High-Resolution image
-        const baseUrl = window.location.href.split('?')[0].split('#')[0];
-        const fullScanUrl = rawEncodedString ? `${baseUrl}?mode=scan&data=${rawEncodedString}` : baseUrl;
+            // QR CODE FIX: The printed QR code is now JUST the base URL link. 
+            // It is no longer dense, prints beautifully, and prevents students from scanning the answer key!
+            const baseUrl = window.location.href.split('?')[0].split('#')[0];
 
-        new QRCode(document.getElementById("qrcode"), {
-            text: fullScanUrl, // Now phones will recognize it as a clickable web link!
-            width: 512,  // Generate high-resolution for crisp printing
-            height: 512, // Generate high-resolution for crisp printing
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.L
-        });
+            new QRCode(document.getElementById("qrcode"), {
+                text: baseUrl, // Clean, simple generic link
+                width: 100, height: 100,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
+            });
 
-        const scanArea = document.getElementById('scanArea');
-        const questionRows = Math.ceil(config.questions / 2);
-        const totalRows = Math.max(10, questionRows);
-        
-        // STEP 2 UPGRADE: Generate pure, scalable SVG instead of HTML divs
-        let svgHtml = `<svg width="100%" height="100%" style="position: absolute; top: 0; left: 0; overflow: visible;">
-            <!-- Anchors (Used by AI Scanner to find the corners) -->
-            <rect x="0%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
-            <rect x="100%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
-            <rect x="0%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
-            <rect x="100%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+            // Changed label to generic text since it doesn't hold answers anymore
+            document.querySelector('.qr-label').innerText = "SMART OMR SYSTEM";
 
-            <!-- Decorative Divider -->
-            <line x1="36%" y1="5%" x2="36%" y2="95%" stroke="#ccc" stroke-dasharray="5,5" stroke-width="2" />
+            const scanArea = document.getElementById('scanArea');
+            const questionRows = Math.ceil(config.questions / 2);
+            const totalRows = Math.max(10, questionRows);
             
-            <!-- Section Titles -->
-            <text x="20%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ROLL NO</text>
-            <text x="68%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ANSWERS</text>
-        `;
-
-        // Helper function to draw perfect SVG circles
-        function drawBubble(cx, cy, label) {
+            let svgHtml = `<svg width="100%" height="100%" style="position: absolute; top: 0; left: 0; overflow: visible;">
             return `
                 <circle cx="${cx}%" cy="${cy}%" r="9" fill="none" stroke="black" stroke-width="1.5" />
                 <text x="${cx}%" y="${cy}%" dy="0.35em" text-anchor="middle" font-size="10" fill="#999">${label}</text>
@@ -528,7 +546,11 @@
                                 cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
                                 
                                 let warpedGray = new cv.Mat(); cv.cvtColor(warped, warpedGray, cv.COLOR_RGBA2GRAY);
-                                let warpedThresh = new cv.Mat(); cv.threshold(warpedGray, warpedThresh, 150, 255, cv.THRESH_BINARY_INV);
+                                let warpedThresh = new cv.Mat(); 
+                                
+                                // STEP 3 UPGRADE: Adaptive Thresholding. 
+                                // This makes the scanner immune to shadows or uneven room lighting!
+                                cv.adaptiveThreshold(warpedGray, warpedThresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 51, 10);
 
                                 let rowContours = new cv.MatVector();
                                 cv.findContours(warpedThresh, rowContours, new cv.Mat(), cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
