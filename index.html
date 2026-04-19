@@ -62,15 +62,13 @@
         #qrcode img { width: 100%; height: 100%; display: block; }
         .qr-label { position: absolute; right: 0; top: 115px; width: 110px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
         .scan-area { position: relative; width: 100%; flex-grow: 1; min-height: 750px; margin-top: 10px; }
-        .anchor { width: 32px; height: 32px; background: black; position: absolute; transform: translate(-50%, -50%); border-radius: 2px; }
-        .tl { top: 0; left: 0; } .tr { top: 0; left: 100%; }
-        .bl { top: 100%; left: 0; } .br { top: 100%; left: 100%; }
-        .sync-mark { position: absolute; left: 4%; transform: translateY(-50%); width: 25px; height: 10px; background: black; }
-        .divider { position: absolute; left: 36%; top: 5%; bottom: 5%; border-left: 2px dashed #ccc; }
-        .section-title { position: absolute; font-weight: bold; font-size: 16px; transform: translateX(-50%); top: 3%; }
-        .bubble { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border: 1.5px solid black; border-radius: 50%; color: #999; font-size: 10px; display: flex; justify-content: center; align-items: center; }
-        .label { position: absolute; font-weight: bold; font-size: 14px; transform: translateY(-50%); top: 50%; text-align: right; width: 30px;}
-        @media print { body.sheet-mode { background-color: white; padding: 0; } .sheet { box-shadow: none; } }
+        
+        /* STEP 2 UPGRADE: Enforcing exact A4 dimensions for perfect printing */
+        @page { size: A4; margin: 0; }
+        @media print { 
+            body.sheet-mode { background-color: white; padding: 0; } 
+            .sheet { box-shadow: none; width: 210mm; height: 297mm; padding: 15mm 20mm; margin: 0; page-break-after: always; } 
+        }
 
         /* ================= SCANNER STYLES ================= */
         body.scanner-mode { background-color: #f4f4f4; padding: 20px; text-align: center; }
@@ -186,20 +184,16 @@
                 </div>
 
                 <div class="instructions" id="outInst">Instructions here...</div>
-            </div>
+        </div>
 
-            <div class="scan-area" id="scanArea">
-                <div class="anchor tl"></div><div class="anchor tr"></div>
-                <div class="anchor bl"></div><div class="anchor br"></div>
-                <div class="divider"></div>
-                <div class="section-title" style="left: 20%;">ROLL NO</div>
-                <div class="section-title" style="left: 68%;">ANSWERS</div>
-            </div>
+        <div class="scan-area" id="scanArea">
+            <!-- STEP 2 UPGRADE: Emptying this div. SVG will be injected here automatically by JS -->
         </div>
     </div>
+</div>
 
-    <!-- ===================================================================== -->
-    <!-- VIEW: SCANNER                                                         -->
+<!-- ===================================================================== -->
+<!-- VIEW: SCANNER                                                         -->
     <!-- ===================================================================== -->
     <div id="view-scanner" class="view">
         <div id="disclaimerSection" class="scanner-card">
@@ -333,55 +327,81 @@
         }
 
         /* ================== SHEET LOGIC ================== */
-        function initSheet(config, rawEncodedString) {
-            document.getElementById('outSchool').innerText = config.school;
-            document.getElementById('outExam').innerText = config.exam;
-            document.getElementById('outTime').innerText = config.time;
-            document.getElementById('outMarks').innerText = config.marks;
-            document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
+    function initSheet(config, rawEncodedString) {
+        document.getElementById('outSchool').innerText = config.school;
+        document.getElementById('outExam').innerText = config.exam;
+        document.getElementById('outTime').innerText = config.time;
+        document.getElementById('outMarks').innerText = config.marks;
+        document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
 
-            new QRCode(document.getElementById("qrcode"), {
-                text: rawEncodedString ? rawEncodedString : "default",
-                width: 100, height: 100, colorDark : "#000000", colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.L
-            });
+        new QRCode(document.getElementById("qrcode"), {
+            text: rawEncodedString ? rawEncodedString : "default",
+            width: 100, height: 100, colorDark : "#000000", colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.L
+        });
 
-            const scanArea = document.getElementById('scanArea');
-            const questionRows = Math.ceil(config.questions / 2);
-            const totalRows = Math.max(10, questionRows);
-            let html = '';
+        const scanArea = document.getElementById('scanArea');
+        const questionRows = Math.ceil(config.questions / 2);
+        const totalRows = Math.max(10, questionRows);
+        
+        // STEP 2 UPGRADE: Generate pure, scalable SVG instead of HTML divs
+        let svgHtml = `<svg width="100%" height="100%" style="position: absolute; top: 0; left: 0; overflow: visible;">
+            <!-- Anchors (Used by AI Scanner to find the corners) -->
+            <rect x="0%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+            <rect x="100%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+            <rect x="0%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+            <rect x="100%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
 
-            for(let i=0; i<totalRows; i++) {
-                let yPct = 12 + (i * (80 / totalRows)); 
-                html += `<div class="sync-mark" style="top: ${yPct}%;"></div>`;
-                
-                if(i < 10) {
-                    for(let d=0; d<config.roll; d++) {
-                        let xPct = 10 + (d * 5);
-                        html += `<div class="bubble" style="top: ${yPct}%; left: ${xPct}%;">${i}</div>`;
-                    }
-                }
+            <!-- Decorative Divider -->
+            <line x1="36%" y1="5%" x2="36%" y2="95%" stroke="#ccc" stroke-dasharray="5,5" stroke-width="2" />
+            
+            <!-- Section Titles -->
+            <text x="20%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ROLL NO</text>
+            <text x="68%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ANSWERS</text>
+        `;
 
-                let q1 = i + 1;
-                if(q1 <= questionRows && q1 <= config.questions) {
-                    html += `<div class="label" style="top: ${yPct}%; left: 39%;">${q1}.</div>`;
-                    [45, 51, 57, 63].forEach((x, idx) => { 
-                        html += `<div class="bubble" style="top: ${yPct}%; left: ${x}%;">${['A','B','C','D'][idx]}</div>`; 
-                    });
-                }
-
-                let q2 = i + 1 + questionRows; 
-                if(q2 <= config.questions) {
-                    html += `<div class="label" style="top: ${yPct}%; left: 69%;">${q2}.</div>`;
-                    [75, 81, 87, 93].forEach((x, idx) => { 
-                        html += `<div class="bubble" style="top: ${yPct}%; left: ${x}%;">${['A','B','C','D'][idx]}</div>`; 
-                    });
-                }
-            }
-            scanArea.innerHTML += html;
+        // Helper function to draw perfect SVG circles
+        function drawBubble(cx, cy, label) {
+            return `
+                <circle cx="${cx}%" cy="${cy}%" r="9" fill="none" stroke="black" stroke-width="1.5" />
+                <text x="${cx}%" y="${cy}%" dy="0.35em" text-anchor="middle" font-size="10" fill="#999">${label}</text>
+            `;
         }
 
-        /* ================== SCANNER LOGIC ================== */
+        for(let i=0; i<totalRows; i++) {
+            let yPct = 12 + (i * (80 / totalRows)); 
+            
+            // Sync Mark (Used by AI scanner to lock onto rows)
+            svgHtml += `<rect x="4%" y="${yPct}%" width="25" height="10" transform="translate(0, -5)" fill="black" />`;
+            
+            if(i < 10) {
+                for(let d=0; d<config.roll; d++) {
+                    let xPct = 10 + (d * 5);
+                    svgHtml += drawBubble(xPct, yPct, i);
+                }
+            }
+
+            let q1 = i + 1;
+            if(q1 <= questionRows && q1 <= config.questions) {
+                svgHtml += `<text x="39%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q1}.</text>`;
+                [45, 51, 57, 63].forEach((x, idx) => { 
+                    svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
+                });
+            }
+
+            let q2 = i + 1 + questionRows; 
+            if(q2 <= config.questions) {
+                svgHtml += `<text x="69%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q2}.</text>`;
+                [75, 81, 87, 93].forEach((x, idx) => { 
+                    svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
+                });
+            }
+        }
+        svgHtml += `</svg>`;
+        scanArea.innerHTML = svgHtml;
+    }
+
+    /* ================== SCANNER LOGIC ================== */
         function initScanner(config) {
             const questionRows = Math.ceil(config.questions / 2);
             const EXPECTED_ROWS = Math.max(10, questionRows);
