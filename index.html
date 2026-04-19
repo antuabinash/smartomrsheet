@@ -103,7 +103,6 @@
         <div class="builder-card">
             <h1>🛠️ OMR Sheet Generator</h1>
             
-            <!-- STEP 1 UPGRADE: Using a proper form with required validation attributes -->
             <form id="builderForm">
                 <div class="form-group">
                     <label>Institution / Header Name</label>
@@ -194,16 +193,16 @@
                 </div>
 
                 <div class="instructions" id="outInst">Instructions here...</div>
-        </div>
+            </div>
 
-        <div class="scan-area" id="scanArea">
-            <!-- STEP 2 UPGRADE: Emptying this div. SVG will be injected here automatically by JS -->
+            <div class="scan-area" id="scanArea">
+                <!-- SVG will be injected here automatically by JS -->
+            </div>
         </div>
     </div>
-</div>
 
-<!-- ===================================================================== -->
-<!-- VIEW: SCANNER                                                         -->
+    <!-- ===================================================================== -->
+    <!-- VIEW: SCANNER                                                         -->
     <!-- ===================================================================== -->
     <div id="view-scanner" class="view">
         <div id="disclaimerSection" class="scanner-card">
@@ -243,17 +242,15 @@
             const urlParams = new URLSearchParams(window.location.search);
             const mode = urlParams.get('mode');
             const encodedData = urlParams.get('data');
-            const scanMicroData = urlParams.get('d'); // NEW: Micro payload for scanner
-            const sheetScanData = urlParams.get('scan'); // NEW: Passed to sheet for QR generation
+            const scanMicroData = urlParams.get('d'); 
+            const sheetScanData = urlParams.get('scan'); 
 
-            // Default Config
             let config = {
                 school: "DEFAULT ACADEMY", exam: "PRACTICE TEST", time: "60 Mins",
                 marks: "100", instructions: "Darken circles completely.", questions: 40, roll: 5,
                 answerKey: new Array(40).fill(0)
             };
 
-            // NEW: Parse the ultra-short micro payload for the scanner
             if (scanMicroData && mode === 'scan') {
                 const parts = scanMicroData.split('-');
                 if (parts.length === 3) {
@@ -262,7 +259,6 @@
                     config.answerKey = parts[2].split('').map(Number);
                 }
             } else if (encodedData) {
-                // Parse full LZString payload for the Sheet view
                 try {
                     const parsed = JSON.parse(LZString.decompressFromEncodedURIComponent(encodedData));
                     config = { ...config, ...parsed };
@@ -272,7 +268,6 @@
                 }
             }
 
-            // View Switcher based on URL
             if (mode === 'sheet') {
                 document.body.className = 'sheet-mode';
                 document.getElementById('view-sheet').style.display = 'block';
@@ -311,7 +306,7 @@
             }
 
             totalQInput.addEventListener('change', generateAnswerKeyUI);
-            generateAnswerKeyUI(); // initial draw
+            generateAnswerKeyUI(); 
 
             document.getElementById('builderForm').addEventListener('submit', function(e) {
                 e.preventDefault(); 
@@ -323,7 +318,6 @@
                     masterKey.push(parseInt(document.getElementById('ans_' + i).value));
                 }
 
-                // 1. Full Config (For the printed sheet text)
                 const config = {
                     school: document.getElementById('schoolName').value.trim(),
                     exam: document.getElementById('examName').value.trim(),
@@ -334,15 +328,12 @@
                     roll: rollDigits,
                     answerKey: masterKey
                 };
-                const encodedSheetData = LZString.compressToEncodedURIComponent(JSON.stringify(config));
                 
-                // 2. MICRO CONFIG (For the QR Code & Scanner URL)
-                // Looks like: "100-5-01230123..." (Strips all text, reducing URL by ~80%)
+                const encodedSheetData = LZString.compressToEncodedURIComponent(JSON.stringify(config));
                 const scanMicroData = `${totalQ}-${rollDigits}-${masterKey.join('')}`;
                 
                 const baseUrl = window.location.href.split('?')[0].split('#')[0];
                 
-                // Pass both full data AND micro data to the sheet view
                 const sheetUrl = `${baseUrl}?mode=sheet&data=${encodedSheetData}&scan=${scanMicroData}`;
                 const scanUrl = `${baseUrl}?mode=scan&d=${scanMicroData}`; 
 
@@ -350,7 +341,6 @@
                 document.getElementById('scanLink').href = scanUrl;
                 document.getElementById('shareableLinkText').innerText = scanUrl;
                 
-                // NEW: Generate the Secure Teacher QR Code directly on the dashboard
                 document.getElementById('teacherQrCode').innerHTML = '';
                 new QRCode(document.getElementById("teacherQrCode"), {
                     text: scanUrl, 
@@ -371,65 +361,80 @@
             document.getElementById('outMarks').innerText = config.marks;
             document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
 
-            // QR CODE FIX: The printed QR code is now JUST the base URL link. 
-            // It is no longer dense, prints beautifully, and prevents students from scanning the answer key!
             const baseUrl = window.location.href.split('?')[0].split('#')[0];
+            const fullScanUrl = scanMicroData ? `${baseUrl}?mode=scan&d=${scanMicroData}` : baseUrl;
 
             new QRCode(document.getElementById("qrcode"), {
-                text: baseUrl, // Clean, simple generic link
-                width: 100, height: 100,
+                text: fullScanUrl, 
+                width: 256, height: 256,
                 colorDark : "#000000", colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.L
             });
 
-            // Changed label to generic text since it doesn't hold answers anymore
-            document.querySelector('.qr-label').innerText = "SMART OMR SYSTEM";
+            document.querySelector('.qr-label').innerText = "SCAN TO GRADE";
 
             const scanArea = document.getElementById('scanArea');
             const questionRows = Math.ceil(config.questions / 2);
             const totalRows = Math.max(10, questionRows);
             
+            // SYNTAX ERROR FIXED HERE
             let svgHtml = `<svg width="100%" height="100%" style="position: absolute; top: 0; left: 0; overflow: visible;">
-            return `
-                <circle cx="${cx}%" cy="${cy}%" r="9" fill="none" stroke="black" stroke-width="1.5" />
-                <text x="${cx}%" y="${cy}%" dy="0.35em" text-anchor="middle" font-size="10" fill="#999">${label}</text>
-            `;
-        }
+                <!-- Anchors (Used by AI Scanner to find the corners) -->
+                <rect x="0%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+                <rect x="100%" y="0%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+                <rect x="0%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
+                <rect x="100%" y="100%" width="32" height="32" transform="translate(-16, -16)" fill="black" />
 
-        for(let i=0; i<totalRows; i++) {
-            let yPct = 12 + (i * (80 / totalRows)); 
-            
-            // Sync Mark (Used by AI scanner to lock onto rows)
-            svgHtml += `<rect x="4%" y="${yPct}%" width="25" height="10" transform="translate(0, -5)" fill="black" />`;
-            
-            if(i < 10) {
-                for(let d=0; d<config.roll; d++) {
-                    let xPct = 10 + (d * 5);
-                    svgHtml += drawBubble(xPct, yPct, i);
+                <!-- Decorative Divider -->
+                <line x1="36%" y1="5%" x2="36%" y2="95%" stroke="#ccc" stroke-dasharray="5,5" stroke-width="2" />
+                
+                <!-- Section Titles -->
+                <text x="20%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ROLL NO</text>
+                <text x="68%" y="3%" text-anchor="middle" font-weight="bold" font-size="16" fill="black">ANSWERS</text>
+            `;
+
+            // Helper function to draw perfect SVG circles
+            function drawBubble(cx, cy, label) {
+                return `
+                    <circle cx="${cx}%" cy="${cy}%" r="9" fill="none" stroke="black" stroke-width="1.5" />
+                    <text x="${cx}%" y="${cy}%" dy="0.35em" text-anchor="middle" font-size="10" fill="#999">${label}</text>
+                `;
+            }
+
+            for(let i=0; i<totalRows; i++) {
+                let yPct = 12 + (i * (80 / totalRows)); 
+                
+                // Sync Mark (Used by AI scanner to lock onto rows)
+                svgHtml += `<rect x="4%" y="${yPct}%" width="25" height="10" transform="translate(0, -5)" fill="black" />`;
+                
+                if(i < 10) {
+                    for(let d=0; d<config.roll; d++) {
+                        let xPct = 10 + (d * 5);
+                        svgHtml += drawBubble(xPct, yPct, i);
+                    }
+                }
+
+                let q1 = i + 1;
+                if(q1 <= questionRows && q1 <= config.questions) {
+                    svgHtml += `<text x="39%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q1}.</text>`;
+                    [45, 51, 57, 63].forEach((x, idx) => { 
+                        svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
+                    });
+                }
+
+                let q2 = i + 1 + questionRows; 
+                if(q2 <= config.questions) {
+                    svgHtml += `<text x="69%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q2}.</text>`;
+                    [75, 81, 87, 93].forEach((x, idx) => { 
+                        svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
+                    });
                 }
             }
-
-            let q1 = i + 1;
-            if(q1 <= questionRows && q1 <= config.questions) {
-                svgHtml += `<text x="39%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q1}.</text>`;
-                [45, 51, 57, 63].forEach((x, idx) => { 
-                    svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
-                });
-            }
-
-            let q2 = i + 1 + questionRows; 
-            if(q2 <= config.questions) {
-                svgHtml += `<text x="69%" y="${yPct}%" dy="0.35em" text-anchor="end" font-weight="bold" font-size="14" fill="black">${q2}.</text>`;
-                [75, 81, 87, 93].forEach((x, idx) => { 
-                    svgHtml += drawBubble(x, yPct, ['A','B','C','D'][idx]);
-                });
-            }
+            svgHtml += `</svg>`;
+            scanArea.innerHTML = svgHtml;
         }
-        svgHtml += `</svg>`;
-        scanArea.innerHTML = svgHtml;
-    }
 
-    /* ================== SCANNER LOGIC ================== */
+        /* ================== SCANNER LOGIC ================== */
         function initScanner(config) {
             const questionRows = Math.ceil(config.questions / 2);
             const EXPECTED_ROWS = Math.max(10, questionRows);
@@ -548,8 +553,7 @@
                                 let warpedGray = new cv.Mat(); cv.cvtColor(warped, warpedGray, cv.COLOR_RGBA2GRAY);
                                 let warpedThresh = new cv.Mat(); 
                                 
-                                // STEP 3 UPGRADE: Adaptive Thresholding. 
-                                // This makes the scanner immune to shadows or uneven room lighting!
+                                // STEP 3 UPGRADE: Adaptive Thresholding 
                                 cv.adaptiveThreshold(warpedGray, warpedThresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 51, 10);
 
                                 let rowContours = new cv.MatVector();
