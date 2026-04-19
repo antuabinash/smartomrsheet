@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart OMR System</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        window.onOpenCvReady = function() {
+            const agreeBtn = document.getElementById('agreeBtn');
+            if (agreeBtn) {
+                agreeBtn.disabled = false;
+                agreeBtn.innerText = "Start Smart Engine";
+            }
+        };
+    </script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="window.onOpenCvReady();"></script>
+
+    <style>
+        /* ================= GLOBAL STYLES ================= */
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-sizing: border-box; }
+        .view { display: none; } /* Hides views by default */
+
+        /* ================= BUILDER STYLES ================= */
+        body.builder-mode { background-color: #f0f2f5; padding: 40px 20px; display: flex; justify-content: center; }
+        .builder-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); max-width: 700px; width: 100%; }
+        .builder-card h1 { margin-top: 0; color: #1a1a1a; text-align: center; margin-bottom: 30px;}
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #4a4a4a; font-size: 14px; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        .form-group textarea { resize: vertical; height: 80px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .ans-key-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 10px; max-height: 250px; overflow-y: auto; padding: 15px; border: 1px solid #ccc; border-radius: 6px; background-color: #f8f9fa; }
+        .ans-item { display: flex; flex-direction: column; align-items: center; }
+        .ans-item label { font-size: 12px; margin-bottom: 4px; color: #333; }
+        .ans-item select { padding: 6px; font-size: 14px; text-align: center; cursor: pointer; }
+        .btn-submit { background-color: #0d6efd; color: white; border: none; padding: 15px; width: 100%; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
+        .btn-submit:hover { background-color: #0b5ed7; }
+        .action-area { margin-top: 30px; padding-top: 30px; border-top: 2px solid #eee; display: none; text-align: center; }
+        .action-area h3 { margin-top: 0; color: #28a745; }
+        .btn-link { display: inline-block; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 10px; transition: 0.3s; }
+        .btn-sheet { background-color: #198754; color: white; }
+        .btn-sheet:hover { background-color: #157347; }
+        .btn-scan { background-color: #ffc107; color: #000; }
+        .btn-scan:hover { background-color: #ffca2c; }
+        .copy-link { margin-top: 15px; font-size: 12px; color: #666; background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; border: 1px solid #ddd;}
+
+        /* ================= SHEET STYLES ================= */
+        body.sheet-mode { background-color: #555; display: flex; justify-content: center; padding: 20px; font-family: Arial, sans-serif; }
+        .sheet { width: 210mm; min-height: 297mm; background-color: white; padding: 30px 40px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;}
+        .header-area { border-bottom: 3px solid black; padding-bottom: 15px; margin-bottom: 20px; text-align: center; position: relative; }
+        .header-area h1 { margin: 0 0 5px 0; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
+        .header-area h2 { margin: 0 0 15px 0; font-size: 16px; color: #444; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; text-align: left; font-size: 14px; font-weight: bold; padding-right: 120px; }
+        .input-group { display: flex; align-items: flex-end; }
+        .input-line { flex-grow: 1; border-bottom: 1px solid black; margin-left: 10px; height: 18px; }
+        .instructions { margin-top: 20px; font-size: 12px; font-style: italic; color: #333; text-align: left; background: #f9f9f9; padding: 10px; border-left: 4px solid #000; }
+        #qrcode { position: absolute; right: 0; top: 0; width: 100px; height: 100px; border: 2px solid #ccc; padding: 5px; background: white;}
+        #qrcode img { width: 100%; height: 100%; display: block; }
+        .qr-label { position: absolute; right: 0; top: 115px; width: 110px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
+        .scan-area { position: relative; width: 100%; flex-grow: 1; min-height: 750px; margin-top: 10px; }
+        .anchor { width: 32px; height: 32px; background: black; position: absolute; transform: translate(-50%, -50%); border-radius: 2px; }
+        .tl { top: 0; left: 0; } .tr { top: 0; left: 100%; }
+        .bl { top: 100%; left: 0; } .br { top: 100%; left: 100%; }
+        .sync-mark { position: absolute; left: 4%; transform: translateY(-50%); width: 25px; height: 10px; background: black; }
+        .divider { position: absolute; left: 36%; top: 5%; bottom: 5%; border-left: 2px dashed #ccc; }
+        .section-title { position: absolute; font-weight: bold; font-size: 16px; transform: translateX(-50%); top: 3%; }
+        .bubble { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border: 1.5px solid black; border-radius: 50%; color: #999; font-size: 10px; display: flex; justify-content: center; align-items: center; }
+        .label { position: absolute; font-weight: bold; font-size: 14px; transform: translateY(-50%); top: 50%; text-align: right; width: 30px;}
+        @media print { body.sheet-mode { background-color: white; padding: 0; } .sheet { box-shadow: none; } }
+
+        /* ================= SCANNER STYLES ================= */
+        body.scanner-mode { background-color: #f4f4f4; padding: 20px; text-align: center; }
+        .scanner-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        .scanner-card h2 { margin-top: 0; }
+        .scanner-card button { padding: 15px 30px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.3s;}
+        .scanner-card button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        #scannerSection { display: none; margin-top: 20px; }
+        .video-container { position: relative; width: 100%; margin: 0 auto; border: 3px solid #333; border-radius: 8px; overflow: hidden; background: #000; }
+        video { width: 100%; display: block; }
+        .guide-wrapper { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; aspect-ratio: 1 / 1.15; z-index: 10; pointer-events: none; border: 2px dashed rgba(255,255,255,0.4); }
+        .target-square { position: absolute; width: 45px; height: 45px; border: 3px solid #007bff; background-color: rgba(0, 123, 255, 0.15); box-shadow: 0 0 10px rgba(0,0,0,0.5); border-radius: 4px; transition: all 0.2s; }
+        .ts-tl { top: -15px; left: -15px; } .ts-tr { top: -15px; right: -15px; }
+        .ts-bl { bottom: -15px; left: -15px; } .ts-br { bottom: -15px; right: -15px; }
+        .status-text { background: #007bff; color: white; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; transition: background 0.3s;}
+        canvas { display: none; width: 100%; border: 3px solid #28a745; border-radius: 8px; margin-top: 15px; background: white;}
+        .result-card { display: none; background: #28a745; color: white; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: left; }
+        .result-card h3 { margin: 0 0 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
+        .result-card p { margin: 5px 0; font-size: 18px; font-weight: bold; }
+        #resetBtn { display: none; background-color: #007bff; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <!-- ===================================================================== -->
+    <!-- VIEW: BUILDER                                                         -->
+    <!-- ===================================================================== -->
+    <div id="view-builder" class="view">
+        <div class="builder-card">
+            <h1>🛠️ OMR Sheet Generator</h1>
+            
+            <!-- STEP 1 UPGRADE: Using a proper form with required validation attributes -->
+            <form id="builderForm">
+                <div class="form-group">
+                    <label>Institution / Header Name</label>
+                    <input type="text" id="schoolName" value="EXCELLENCE ACADEMY" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Sub-Header / Examination Name</label>
+                    <input type="text" id="examName" value="TERM 1 FINAL EXAMINATION - 2026" required>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Time Allowed</label>
+                        <input type="text" id="timeAllowed" value="60 Minutes" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Marks</label>
+                        <input type="number" id="fullMarks" value="40" required>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Total Questions (Max 100)</label>
+                        <input type="number" id="totalQ" value="40" min="1" max="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Roll No Digits (2 to 8)</label>
+                        <input type="number" id="rollDigits" value="5" min="2" max="8" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Master Answer Key</label>
+                    <div class="ans-key-container" id="ansKeyContainer">
+                        <!-- Dropdowns generated by JS -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Custom Instructions</label>
+                    <textarea id="instructions" required>Darken circles completely using a blue/black pen. Do not fold the paper. Keep all 4 corner squares clear of stray marks.</textarea>
+                </div>
+
+                <button type="submit" class="btn-submit">Generate OMR System</button>
+            </form>
+
+            <div class="action-area" id="actionArea">
+                <h3>✅ System Generated Successfully!</h3>
+                <p style="font-size: 14px; color: #555;">Your custom sheet and scanner are ready.</p>
+                
+                <a href="#" id="sheetLink" target="_blank" class="btn-link btn-sheet">📄 Print OMR Sheet</a>
+                <a href="#" id="scanLink" target="_blank" class="btn-link btn-scan">📷 Open Scanner</a>
+                
+                <div class="copy-link">
+                    <strong>Shareable Scanner Link for Teachers:</strong><br>
+                    <span id="shareableLinkText"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- VIEW: OMR SHEET                                                       -->
+    <!-- ===================================================================== -->
+    <div id="view-sheet" class="view">
+        <div class="sheet">
+            <div class="header-area">
+                <h1 id="outSchool">SCHOOL NAME</h1>
+                <h2 id="outExam">EXAMINATION NAME</h2>
+                
+                <div id="qrcode"></div>
+                <div class="qr-label">SCAN TO GRADE</div>
+
+                <div class="info-grid">
+                    <div class="input-group">Student Name: <div class="input-line"></div></div>
+                    <div class="input-group">Time: <span id="outTime" style="margin-left:5px; font-weight:normal;"></span><div class="input-line"></div></div>
+                    <div class="input-group">Subject/Batch: <div class="input-line"></div></div>
+                    <div class="input-group">Full Marks: <span id="outMarks" style="margin-left:5px; font-weight:normal;"></span><div class="input-line"></div></div>
+                </div>
+
+                <div class="instructions" id="outInst">Instructions here...</div>
+            </div>
+
+            <div class="scan-area" id="scanArea">
+                <div class="anchor tl"></div><div class="anchor tr"></div>
+                <div class="anchor bl"></div><div class="anchor br"></div>
+                <div class="divider"></div>
+                <div class="section-title" style="left: 20%;">ROLL NO</div>
+                <div class="section-title" style="left: 68%;">ANSWERS</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- VIEW: SCANNER                                                         -->
+    <!-- ===================================================================== -->
+    <div id="view-scanner" class="view">
+        <div id="disclaimerSection" class="scanner-card">
+            <h2>Scanner Configuration Loaded</h2>
+            <p id="configReadout" style="font-weight: bold; color: #333;"></p>
+            <button id="agreeBtn" disabled>Loading AI Engine...</button>
+        </div>
+
+        <div id="scannerSection" class="scanner-card">
+            <div id="scanStatus" class="status-text">Match the 4 black corners to the blue boxes...</div>
+            
+            <div class="video-container" id="vidContainer">
+                <video id="cameraFeed" autoplay playsinline></video>
+                <div class="guide-wrapper" id="guideContainer">
+                    <div class="target-square ts-tl"></div><div class="target-square ts-tr"></div>
+                    <div class="target-square ts-bl"></div><div class="target-square ts-br"></div>
+                </div>
+            </div>
+            
+            <canvas id="canvasOutput"></canvas>
+            
+            <div class="result-card" id="resultCard">
+                <h3>Evaluation Complete</h3>
+                <p id="rollOut">Roll No: --</p>
+                <p id="scoreOut" style="font-size: 24px; margin-top: 10px;">Score: -- / --</p>
+            </div>
+            <button id="resetBtn">Scan Next Sheet</button>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- JAVASCRIPT APP LOGIC                                                  -->
+    <!-- ===================================================================== -->
+    <script>
+        // ROUTER INITIALIZATION
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const mode = urlParams.get('mode');
+            const encodedData = urlParams.get('data');
+
+            // Default Config
+            let config = {
+                school: "DEFAULT ACADEMY", exam: "PRACTICE TEST", time: "60 Mins",
+                marks: "100", instructions: "Darken circles completely.", questions: 40, roll: 5,
+                answerKey: new Array(40).fill(0)
+            };
+
+            if (encodedData) {
+                try {
+                    // STEP 1 UPGRADE: Decompressing the URL string using LZString
+                    config = JSON.parse(LZString.decompressFromEncodedURIComponent(encodedData));
+                    if (!config.answerKey) config.answerKey = new Array(config.questions).fill(0);
+                } catch (e) {
+                    console.error("Data decode failed, using defaults.");
+                }
+            }
+
+            // View Switcher based on URL
+            if (mode === 'sheet') {
+                document.body.className = 'sheet-mode';
+                document.getElementById('view-sheet').style.display = 'block';
+                initSheet(config, encodedData);
+            } else if (mode === 'scan') {
+                document.body.className = 'scanner-mode';
+                document.getElementById('view-scanner').style.display = 'block';
+                initScanner(config);
+            } else {
+                document.body.className = 'builder-mode';
+                document.getElementById('view-builder').style.display = 'block';
+                initBuilder();
+            }
+        };
+
+        /* ================== BUILDER LOGIC ================== */
+        function initBuilder() {
+            const totalQInput = document.getElementById('totalQ');
+            const container = document.getElementById('ansKeyContainer');
+
+            function generateAnswerKeyUI() {
+                const totalQ = parseInt(totalQInput.value) || 40;
+                let html = '';
+                for (let i = 1; i <= totalQ; i++) {
+                    html += `
+                        <div class="ans-item">
+                            <label>Q${i}</label>
+                            <select id="ans_${i}">
+                                <option value="0">A</option><option value="1">B</option>
+                                <option value="2">C</option><option value="3">D</option>
+                            </select>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            }
+
+            totalQInput.addEventListener('change', generateAnswerKeyUI);
+            generateAnswerKeyUI(); // initial draw
+
+            document.getElementById('builderForm').addEventListener('submit', function(e) {
+                e.preventDefault(); // Prevents page reload
+
+                const totalQ = parseInt(totalQInput.value);
+                let masterKey = [];
+                for (let i = 1; i <= totalQ; i++) {
+                    masterKey.push(parseInt(document.getElementById('ans_' + i).value));
+                }
+
+                const config = {
+                    school: document.getElementById('schoolName').value.trim(),
+                    exam: document.getElementById('examName').value.trim(),
+                    time: document.getElementById('timeAllowed').value.trim(),
+                    marks: document.getElementById('fullMarks').value,
+                    instructions: document.getElementById('instructions').value.trim(),
+                    questions: totalQ,
+                    roll: parseInt(document.getElementById('rollDigits').value),
+                    answerKey: masterKey
+                };
+
+                // STEP 1 UPGRADE: Compressing to create tiny, safe URLs
+                const encodedData = LZString.compressToEncodedURIComponent(JSON.stringify(config));
+                const baseUrl = window.location.href.split('?')[0].split('#')[0];
+                
+                const sheetUrl = `${baseUrl}?mode=sheet&data=${encodedData}`;
+                const scanUrl = `${baseUrl}?mode=scan&data=${encodedData}`; 
+
+                document.getElementById('sheetLink').href = sheetUrl;
+                document.getElementById('scanLink').href = scanUrl;
+                document.getElementById('shareableLinkText').innerText = scanUrl;
+                document.getElementById('actionArea').style.display = 'block';
+            });
+        }
+
+        /* ================== SHEET LOGIC ================== */
+        function initSheet(config, rawEncodedString) {
+            document.getElementById('outSchool').innerText = config.school;
+            document.getElementById('outExam').innerText = config.exam;
+            document.getElementById('outTime').innerText = config.time;
+            document.getElementById('outMarks').innerText = config.marks;
+            document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
+
+            new QRCode(document.getElementById("qrcode"), {
+                text: rawEncodedString ? rawEncodedString : "default",
+                width: 100, height: 100, colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
+            });
+
+            const scanArea = document.getElementById('scanArea');
+            const questionRows = Math.ceil(config.questions / 2);
+            const totalRows = Math.max(10, questionRows);
+            let html = '';
+
+            for(let i=0; i<totalRows; i++) {
+                let yPct = 12 + (i * (80 / totalRows)); 
+                html += `<div class="sync-mark" style="top: ${yPct}%;"></div>`;
+                
+                if(i < 10) {
+                    for(let d=0; d<config.roll; d++) {
+                        let xPct = 10 + (d * 5);
+                        html += `<div class="bubble" style="top: ${yPct}%; left: ${xPct}%;">${i}</div>`;
+                    }
+                }
+
+                let q1 = i + 1;
+                if(q1 <= questionRows && q1 <= config.questions) {
+                    html += `<div class="label" style="top: ${yPct}%; left: 39%;">${q1}.</div>`;
+                    [45, 51, 57, 63].forEach((x, idx) => { 
+                        html += `<div class="bubble" style="top: ${yPct}%; left: ${x}%;">${['A','B','C','D'][idx]}</div>`; 
+                    });
+                }
+
+                let q2 = i + 1 + questionRows; 
+                if(q2 <= config.questions) {
+                    html += `<div class="label" style="top: ${yPct}%; left: 69%;">${q2}.</div>`;
+                    [75, 81, 87, 93].forEach((x, idx) => { 
+                        html += `<div class="bubble" style="top: ${yPct}%; left: ${x}%;">${['A','B','C','D'][idx]}</div>`; 
+                    });
+                }
+            }
+            scanArea.innerHTML += html;
+        }
+
+        /* ================== SCANNER LOGIC ================== */
+        function initScanner(config) {
+            const questionRows = Math.ceil(config.questions / 2);
+            const EXPECTED_ROWS = Math.max(10, questionRows);
+
+            document.getElementById('configReadout').innerText = `Grading Setup: ${config.questions} Questions | Custom Answer Key Loaded`;
+
+            const agreeBtn = document.getElementById('agreeBtn');
+            const disclaimerSection = document.getElementById('disclaimerSection');
+            const scannerSection = document.getElementById('scannerSection');
+            const videoElement = document.getElementById('cameraFeed');
+            const canvasElement = document.getElementById('canvasOutput');
+            const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: true });
+            
+            const scanStatus = document.getElementById('scanStatus');
+            const resultCard = document.getElementById('resultCard');
+            const rollOut = document.getElementById('rollOut');
+            const scoreOut = document.getElementById('scoreOut');
+            const resetBtn = document.getElementById('resetBtn');
+            const vidContainer = document.getElementById('vidContainer');
+            const targetSquares = document.querySelectorAll('.target-square');
+            const guideContainer = document.getElementById('guideContainer');
+            
+            let autoScanInterval;
+            let stableFrames = 0;
+            let lastCenters = [];
+
+            function setTargetUI(color, bgColor) {
+                targetSquares.forEach(sq => { sq.style.borderColor = color; sq.style.backgroundColor = bgColor; });
+                guideContainer.style.borderColor = color;
+            }
+
+            agreeBtn.addEventListener('click', () => {
+                disclaimerSection.style.display = 'none';
+                scannerSection.style.display = 'block';
+
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
+                .then(stream => {
+                    videoElement.srcObject = stream;
+                    autoScanInterval = setInterval(attemptAutoCapture, 500); 
+                }).catch(error => { alert(`Camera Failed: ${error.message}`); });
+            });
+
+            function areCentersStable(newCenters, oldCenters) {
+                if (oldCenters.length !== 4) return false;
+                let diff = 0;
+                for(let i=0; i<4; i++) diff += Math.abs(newCenters[i].x - oldCenters[i].x) + Math.abs(newCenters[i].y - oldCenters[i].y);
+                return diff < 100; 
+            }
+
+            function sortCorners(corners) {
+                corners.sort((a, b) => (a.x + a.y) - (b.x + b.y));
+                let tl = corners[0]; let br = corners[corners.length - 1];
+                corners.sort((a, b) => (a.x - a.y) - (b.x - b.y));
+                let bl = corners[0]; let tr = corners[corners.length - 1];
+                return [tl, tr, bl, br];
+            }
+
+            function attemptAutoCapture() {
+                if (videoElement.videoWidth === 0) return; 
+                canvasElement.width = videoElement.videoWidth; canvasElement.height = videoElement.videoHeight;
+                canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+
+                try {
+                    let src = cv.imread('canvasOutput'); 
+                    let gray = new cv.Mat(); let thresh = new cv.Mat();
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+
+                    let contours = new cv.MatVector(); let hierarchy = new cv.Mat();
+                    cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    let cornerCenters = []; 
+                    for (let i = 0; i < contours.size(); ++i) {
+                        let cnt = contours.get(i);
+                        let area = cv.contourArea(cnt);
+                        let bRect = cv.boundingRect(cnt);
+                        let markerAspectRatio = bRect.width / bRect.height;
+                        let solidity = area / (bRect.width * bRect.height);
+
+                        if (area > 150 && area < 25000 && markerAspectRatio >= 0.6 && markerAspectRatio <= 1.4 && solidity > 0.8) { 
+                            cornerCenters.push({ x: bRect.x + (bRect.width / 2), y: bRect.y + (bRect.height / 2), area: area });
+                        }
+                    }
+
+                    if (cornerCenters.length >= 4) {
+                        cornerCenters.sort((a, b) => b.area - a.area);
+                        let best4 = cornerCenters.slice(0, 4);
+                        let sortedCorners = sortCorners(best4);
+                        
+                        let estimatedWidth = Math.hypot(sortedCorners[1].x - sortedCorners[0].x, sortedCorners[1].y - sortedCorners[0].y);
+
+                        if(estimatedWidth > canvasElement.width * 0.4) {
+                            if (areCentersStable(sortedCorners, lastCenters)) {
+                                stableFrames++;
+                                scanStatus.style.backgroundColor = "#ffc107"; scanStatus.innerText = `Holding steady... ${stableFrames}/4`;
+                                setTargetUI("#ffc107", "rgba(255, 193, 7, 0.2)");
+                            } else {
+                                stableFrames = 1;
+                                scanStatus.style.backgroundColor = "#17a2b8"; scanStatus.innerText = `Aligning...`;
+                                setTargetUI("#17a2b8", "rgba(23, 162, 184, 0.2)");
+                            }
+                            lastCenters = sortedCorners;
+
+                            if (stableFrames >= 4) {
+                                clearInterval(autoScanInterval); 
+                                scanStatus.style.backgroundColor = "#28a745"; scanStatus.innerText = "Running Smart Evaluation...";
+                                setTargetUI("#28a745", "rgba(40, 167, 69, 0.3)");
+
+                                let warped = new cv.Mat();
+                                let outW = 900; let outH = 1000; 
+                                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [sortedCorners[0].x, sortedCorners[0].y, sortedCorners[1].x, sortedCorners[1].y, sortedCorners[3].x, sortedCorners[3].y, sortedCorners[2].x, sortedCorners[2].y]);
+                                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW, 0, outW, outH, 0, outH]);
+                                let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                                cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+                                
+                                let warpedGray = new cv.Mat(); cv.cvtColor(warped, warpedGray, cv.COLOR_RGBA2GRAY);
+                                let warpedThresh = new cv.Mat(); cv.threshold(warpedGray, warpedThresh, 150, 255, cv.THRESH_BINARY_INV);
+
+                                let rowContours = new cv.MatVector();
+                                cv.findContours(warpedThresh, rowContours, new cv.Mat(), cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+                                let rowMarks = [];
+                                for (let j = 0; j < rowContours.size(); ++j) {
+                                    let bRect = cv.boundingRect(rowContours.get(j));
+                                    let cX = bRect.x + (bRect.width / 2); let cY = bRect.y + (bRect.height / 2);
+                                    if (cX < outW * 0.08 && bRect.width > bRect.height * 1.5 && bRect.width > outW * 0.01) {
+                                        if (cY > outH * 0.05 && cY < outH * 0.95) rowMarks.push({ y: cY });
+                                    }
+                                }
+                                rowMarks.sort((a, b) => a.y - b.y);
+                                let uniqueMarks = [];
+                                for(let i=0; i<rowMarks.length; i++) {
+                                    if (uniqueMarks.length === 0 || rowMarks[i].y - uniqueMarks[uniqueMarks.length-1].y > outH * 0.02) uniqueMarks.push(rowMarks[i]);
+                                }
+
+                                if (uniqueMarks.length === EXPECTED_ROWS) {
+                                    
+                                    let checkBubble = function(threshMat, x, y, r) {
+                                        let box = new cv.Rect(Math.max(0, x - r), Math.max(0, y - r), r * 2, r * 2);
+                                        if(box.x + box.width > outW || box.y + box.height > outH) return false;
+                                        let roi = threshMat.roi(box);
+                                        let fillRatio = cv.countNonZero(roi) / (box.width * box.height);
+                                        roi.delete(); return fillRatio > 0.40; 
+                                    };
+
+                                    let radius = outW * 0.011;
+                                    let rollNoArray = new Array(config.roll).fill(-1);
+                                    
+                                    for (let i = 0; i < 10; i++) {
+                                        let rowY = uniqueMarks[i].y;
+                                        for(let d = 0; d < config.roll; d++) {
+                                            let xPct = 0.10 + (d * 0.05);
+                                            let x = outW * xPct; 
+                                            let filled = checkBubble(warpedThresh, x, rowY, radius);
+                                            if (filled) rollNoArray[d] = i; 
+                                            cv.circle(warped, new cv.Point(x, rowY), Math.round(radius), filled ? [0, 255, 0, 255] : [200, 200, 200, 255], filled ? 3 : 2);
+                                        }
+                                    }
+
+                                    let correctAnswers = 0;
+                                    for (let q = 0; q < config.questions; q++) {
+                                        let isCol1 = (q < questionRows);
+                                        let rowIdx = isCol1 ? q : (q - questionRows);
+                                        let rowY = uniqueMarks[rowIdx].y;
+                                        
+                                        let xPcts = isCol1 ? [0.45, 0.51, 0.57, 0.63] : [0.75, 0.81, 0.87, 0.93];
+                                        let expectedAns = config.answerKey[q];
+                                        let filledOptions = [];
+                                        
+                                        for (let opt = 0; opt < 4; opt++) {
+                                            if (checkBubble(warpedThresh, outW * xPcts[opt], rowY, radius)) filledOptions.push(opt);
+                                        }
+                                        
+                                        let isCorrect = (filledOptions.length === 1 && filledOptions[0] === expectedAns);
+                                        if (isCorrect) correctAnswers++;
+
+                                        for (let opt = 0; opt < 4; opt++) {
+                                            let center = new cv.Point(outW * xPcts[opt], rowY);
+                                            let filled = filledOptions.includes(opt);
+                                            if (filled) cv.circle(warped, center, Math.round(radius), isCorrect ? [0, 255, 0, 255] : [255, 0, 0, 255], 4);
+                                            else cv.circle(warped, center, Math.round(radius), (opt === expectedAns) ? [0, 150, 255, 255] : [200, 200, 200, 255], (opt === expectedAns) ? 3 : 2);
+                                        }
+                                    }
+
+                                    let rollStr = rollNoArray.map(d => d === -1 ? '?' : d).join('');
+
+                                    canvasElement.width = outW; canvasElement.height = outH; 
+                                    canvasElement.style.display = "block"; cv.imshow('canvasOutput', warped);
+                                    vidContainer.style.display = "none";
+                                    scanStatus.style.backgroundColor = "#28a745"; scanStatus.innerText = "Evaluation Complete!";
+                                    
+                                    resultCard.style.display = "block";
+                                    rollOut.innerText = `Roll No: ${rollStr}`; 
+                                    scoreOut.innerText = `Score: ${correctAnswers} / ${config.questions}`; 
+                                    resetBtn.style.display = "block"; 
+
+                                } else {
+                                    stableFrames = 0; lastCenters = [];
+                                    scanStatus.style.backgroundColor = "#17a2b8"; scanStatus.innerText = `Expecting ${EXPECTED_ROWS} rows. Found ${uniqueMarks.length}. Keep steady...`;
+                                    setTargetUI("rgba(255, 255, 255, 0.4)", "transparent");
+                                    autoScanInterval = setInterval(attemptAutoCapture, 500);
+                                }
+
+                                srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+                                warpedGray.delete(); warpedThresh.delete(); rowContours.delete();
+                            }
+                        } else {
+                            stableFrames = 0; lastCenters = [];
+                            scanStatus.style.backgroundColor = "#007bff"; scanStatus.innerText = "Bring the sheet closer...";
+                            setTargetUI("rgba(255, 255, 255, 0.4)", "transparent");
+                        }
+                    } else {
+                        stableFrames = 0; lastCenters = [];
+                        scanStatus.style.backgroundColor = "#007bff"; scanStatus.innerText = `Match the 4 black corners to the blue boxes...`;
+                        setTargetUI("#007bff", "rgba(0, 123, 255, 0.15)");
+                    }
+                    src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete();
+                } catch (err) {}
+            }
+
+            resetBtn.addEventListener('click', () => {
+                canvasElement.style.display = "none"; resultCard.style.display = "none"; resetBtn.style.display = "none";
+                vidContainer.style.display = "block";
+                stableFrames = 0; lastCenters = [];
+                scanStatus.style.backgroundColor = "#007bff"; scanStatus.innerText = "Match the 4 black corners to the blue boxes...";
+                setTargetUI("#007bff", "rgba(0, 123, 255, 0.15)");
+                autoScanInterval = setInterval(attemptAutoCapture, 500);
+            });
+        }
+    </script>
+</body>
+</html>
