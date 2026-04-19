@@ -54,13 +54,16 @@
         .header-area { border-bottom: 3px solid black; padding-bottom: 15px; margin-bottom: 20px; text-align: center; position: relative; }
         .header-area h1 { margin: 0 0 5px 0; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
         .header-area h2 { margin: 0 0 15px 0; font-size: 16px; color: #444; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; text-align: left; font-size: 14px; font-weight: bold; padding-right: 120px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; text-align: left; font-size: 14px; font-weight: bold; padding-right: 140px; }
         .input-group { display: flex; align-items: flex-end; }
         .input-line { flex-grow: 1; border-bottom: 1px solid black; margin-left: 10px; height: 18px; }
         .instructions { margin-top: 20px; font-size: 12px; font-style: italic; color: #333; text-align: left; background: #f9f9f9; padding: 10px; border-left: 4px solid #000; }
-        #qrcode { position: absolute; right: 0; top: 0; width: 100px; height: 100px; border: 2px solid #ccc; padding: 5px; background: white;}
-        #qrcode img { width: 100%; height: 100%; display: block; }
-        .qr-label { position: absolute; right: 0; top: 115px; width: 110px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
+        
+        /* QR Code CSS Fix: Added canvas target, enforced !important scaling, and increased size slightly */
+        #qrcode { position: absolute; right: 0; top: 0; width: 120px; height: 120px; border: 2px solid #ccc; padding: 5px; background: white;}
+        #qrcode img, #qrcode canvas { width: 100% !important; height: 100% !important; display: block; }
+        .qr-label { position: absolute; right: 0; top: 135px; width: 130px; text-align: center; font-size: 9px; font-weight: bold; color: #666; }
+        
         .scan-area { position: relative; width: 100%; flex-grow: 1; min-height: 750px; margin-top: 10px; }
         
         /* STEP 2 UPGRADE: Enforcing exact A4 dimensions for perfect printing */
@@ -334,9 +337,16 @@
         document.getElementById('outMarks').innerText = config.marks;
         document.getElementById('outInst').innerText = "Instructions: " + config.instructions;
 
+        // QR CODE FIX: Generate Full URL and High-Resolution image
+        const baseUrl = window.location.href.split('?')[0].split('#')[0];
+        const fullScanUrl = rawEncodedString ? `${baseUrl}?mode=scan&data=${rawEncodedString}` : baseUrl;
+
         new QRCode(document.getElementById("qrcode"), {
-            text: rawEncodedString ? rawEncodedString : "default",
-            width: 100, height: 100, colorDark : "#000000", colorLight : "#ffffff",
+            text: fullScanUrl, // Now phones will recognize it as a clickable web link!
+            width: 512,  // Generate high-resolution for crisp printing
+            height: 512, // Generate high-resolution for crisp printing
+            colorDark : "#000000",
+            colorLight : "#ffffff",
             correctLevel : QRCode.CorrectLevel.L
         });
 
