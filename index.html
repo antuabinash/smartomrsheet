@@ -400,7 +400,11 @@
             for(let i=0; i<totalRows; i++) {
                 let yPct = 12 + (i * (80 / totalRows)); 
                 
+                // Left Sync Mark
                 svgHtml += `<rect x="4%" y="${yPct}%" width="25" height="10" transform="translate(0, -5)" fill="black" />`;
+                
+                // NEW: Right Sync Mark (Timing Track for extreme precision)
+                svgHtml += `<rect x="96%" y="${yPct}%" width="25" height="10" transform="translate(-25, -5)" fill="black" />`;
                 
                 if(i < 10) {
                     for(let d=0; d<config.roll; d++) {
