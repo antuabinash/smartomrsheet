@@ -603,29 +603,36 @@
                                         return leftPt.y; 
                                     };
                                     
-                                    let checkBubble = function(threshMat, x, y, r) {
+                                    // 🚀 SMART STRATEGY 4: Grayscale Contrast Analysis 
+                                    // No more hallucinated noise. We analyze raw pixel darkness.
+                                    let checkBubble = function(x, y, r) {
                                         let innerR = r * 0.5; 
                                         let box = new cv.Rect(Math.max(0, x - innerR), Math.max(0, y - innerR), innerR * 2, innerR * 2);
-                                        if(box.x + box.width > outW || box.y + box.height > outH) return 0;
-                                        let roi = threshMat.roi(box);
-                                        let fillRatio = cv.countNonZero(roi) / (box.width * box.height);
+                                        if(box.x + box.width > outW || box.y + box.height > outH) return 255; // Default white
+                                        let roi = warpedGray.roi(box);
+                                        let mean = cv.mean(roi)[0]; // 0 = Pure Black, 255 = Pure White
                                         roi.delete(); 
-                                        return fillRatio; 
+                                        return mean; 
                                     };
 
                                     let radius = outW * 0.011;
                                     let rollNoArray = new Array(config.roll).fill(-1);
                                     
                                     for(let d = 0; d < config.roll; d++) {
-                                        let bestRatio = 0.40; 
+                                        let bestContrast = 30; // Must be at least 30 units darker than paper
                                         let bestDigit = -1;
                                         
                                         for (let i = 0; i < 10; i++) {
-                                            let x = outW * (0.08 + (d * 0.04)); // Matches the UNIFIED MASTER GRID
+                                            let x = outW * (0.08 + (d * 0.04)); 
                                             let rowY = getExactY(i, x); 
-                                            let ratio = checkBubble(warpedThresh, x, rowY, radius);
-                                            if (ratio > bestRatio) {
-                                                bestRatio = ratio;
+                                            let bubbleMean = checkBubble(x, rowY, radius);
+                                            
+                                            // Sample the blank white paper gap perfectly between the sync mark and bubbles
+                                            let bgMean = checkBubble(outW * 0.06, rowY, radius);
+                                            
+                                            let contrast = bgMean - bubbleMean;
+                                            if (contrast > bestContrast) {
+                                                bestContrast = contrast;
                                                 bestDigit = i;
                                             }
                                         }
@@ -644,16 +651,23 @@
                                         let isCol1 = (q < questionRows);
                                         let rowIdx = isCol1 ? q : (q - questionRows);
                                         
-                                        // Matches the UNIFIED MASTER GRID exactly
                                         let xPcts = isCol1 ? [0.45, 0.50, 0.55, 0.60] : [0.75, 0.80, 0.85, 0.90];
                                         let expectedAns = config.answerKey[q];
-                                        let filledOptions = [];
+                                        let optMeans = [];
                                         
                                         for (let opt = 0; opt < 4; opt++) {
                                             let x = outW * xPcts[opt];
                                             let rowY = getExactY(rowIdx, x); 
-                                            let ratio = checkBubble(warpedThresh, x, rowY, radius);
-                                            if (ratio > 0.40) { 
+                                            optMeans.push(checkBubble(x, rowY, radius));
+                                        }
+                                        
+                                        // The lightest bubble in this specific question is our "Paper Color" baseline
+                                        let maxMean = Math.max(...optMeans); 
+                                        let filledOptions = [];
+                                        
+                                        for (let opt = 0; opt < 4; opt++) {
+                                            // Only trigger if it heavily drops in brightness compared to the baseline
+                                            if (maxMean - optMeans[opt] > 30) {
                                                 filledOptions.push(opt);
                                             }
                                         }
